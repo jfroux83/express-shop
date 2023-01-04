@@ -1,67 +1,76 @@
-const path = require('path')
-const express = require('express')
-const bodyParser = require('body-parser')
-const mongoose = require('mongoose')
-const session = require('express-session')
+const path = require('path');
 
-const errorController = require('./controllers/error')
-const User = require('./models/user')
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const MongoDBStore = require('connect-mongodb-session')(session);
 
-const app = express()
+const errorController = require('./controllers/error');
+const User = require('./models/user');
 
-app.set('view engine', 'ejs')
-app.set('views', 'views')
+const MONGODB_URI =
+  'mongodb+srv://jacquesroux:xWt394nEGH32bK6O@cluster0.khugxo3.mongodb.net/shop';
 
-const adminRoutes = require('./routes/admin')
-const shopRoutes = require('./routes/shop')
-const authRoutes = require('./routes/auth')
+const app = express();
+const store = new MongoDBStore({
+  uri: MONGODB_URI,
+  collection: 'sessions'
+});
 
-app.use(bodyParser.urlencoded({extended: false}))
-app.use(express.static(path.join(__dirname, 'public')))
-app.use(session({ 
-   secret: 'my secret', 
-    resave: false, 
-    saveUninitialized: false 
-  }
-))
+app.set('view engine', 'ejs');
+app.set('views', 'views');
+
+const adminRoutes = require('./routes/admin');
+const shopRoutes = require('./routes/shop');
+const authRoutes = require('./routes/auth');
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(
+  session({
+    secret: 'my secret',
+    resave: false,
+    saveUninitialized: false,
+    store: store
+  })
+);
 
 app.use((req, res, next) => {
-  User.findById('63afc5c3894cade6e93b3902')
+  if (!req.session.user) {
+    return next();
+  }
+  User.findById(req.session.user._id)
     .then(user => {
-      req.user = user
-      next()
+      req.user = user;
+      next();
     })
-    .catch(err => {
-      console.log(err)
-    })
-})
+    .catch(err => console.log(err));
+});
 
-app.use('/admin', adminRoutes)
-app.use(shopRoutes)
-app.use(authRoutes)
+app.use('/admin', adminRoutes);
+app.use(shopRoutes);
+app.use(authRoutes);
 
-app.use(errorController.get404)
+app.use(errorController.get404);
 
-mongoose.connect('mongodb+srv://jacquesroux:xWt394nEGH32bK6O@cluster0.khugxo3.mongodb.net/shop?retryWrites=true&w=majority')
+mongoose
+  .connect(MONGODB_URI)
   .then(result => {
-    User.findOne()
-      .then(user => {
-        if (!user) {
-          const user = new User({
-            name: 'Jacques',
-            email: 'jacques@phoenexis.co.za',
-            cart: {
-              items: []
-            }
-          })
-          user.save()
-        }
-      })
-
-    app.listen(3000, () => {
-      console.log("Listening on port 3000...")
-    })
+    User.findOne().then(user => {
+      if (!user) {
+        const user = new User({
+          name: 'Jacques',
+          email: 'jacques@phoenexis.co.za',
+          cart: {
+            items: []
+          }
+        });
+        user.save();
+      }
+    });
+    app.listen(3000);
   })
   .catch(err => {
-    console.log(err)
-  })
+    console.log(err);
+  });
